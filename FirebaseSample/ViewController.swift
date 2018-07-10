@@ -8,10 +8,13 @@
 
 import UIKit
 import UserNotifications
+import Pring
 
-class ViewController: UIViewController {
+class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
 
     private var user: User?
+    private var dataSource: DataSource<Book>?
+    private var tableView: UITableView!
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -21,15 +24,37 @@ class ViewController: UIViewController {
             print("push permission finished")
         }
         
-        User.anonymousLogin() { user in
-            self.user = user
+        setButton()
+        setTableView()
+        
+        User.anonymousLogin() { [weak self] user in
+            self?.user = user
             if let user = user {
                 user.fcmToken = UserDefaults.standard.string(forKey: "FCM_TOKEN")
                 user.update()
+                
+                let options = Options()
+                let sortDescriptor = NSSortDescriptor(key: "createdAt", ascending: false)
+                options.sortDescirptors = [sortDescriptor]
+
+                self?.dataSource = user.books.order(by: \Book.createdAt).dataSource(options: options)
+                    .on() { (snapshot, changes) in
+                        guard let tableView = self?.tableView else { return }
+                        switch changes {
+                        case .initial:
+                            tableView.reloadData()
+                        case .update(let deletions, let insertions, let modifications):
+                            tableView.beginUpdates()
+                            tableView.insertRows(at: insertions.map { IndexPath(row: $0, section: 0) }, with: .automatic)
+                            tableView.deleteRows(at: deletions.map { IndexPath(row: $0, section: 0) }, with: .automatic)
+                            tableView.reloadRows(at: modifications.map { IndexPath(row: $0, section: 0) }, with: .automatic)
+                            tableView.endUpdates()
+                        case .error(let error):
+                            print(error)
+                        }
+                    }.listen()
             }
         }
-        
-        setButton()
     }
     
     private func setButton() {
@@ -46,5 +71,25 @@ class ViewController: UIViewController {
         book.name = "Alice in Wonderland"
         user?.books.insert(book)
         user?.update()
+    }
+    
+    private func setTableView() {
+        let f = view.frame
+        tableView = UITableView(frame: CGRect(x: 0, y: 50 + f.height / 6, width: f.width, height: f.height * 5 / 6 - 50), style: .plain)
+        tableView.delegate = self
+        tableView.dataSource = self
+        tableView.tableFooterView = UIView()
+        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "BookCell")
+        view.addSubview(tableView)
+    }
+    
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        return dataSource?.count ?? 0
+    }
+    
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: "BookCell", for: indexPath)
+        cell.textLabel?.text = dataSource?[indexPath.item].name
+        return cell
     }
 }
