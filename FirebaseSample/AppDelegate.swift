@@ -66,6 +66,8 @@ extension AppDelegate : UNUserNotificationCenterDelegate {
 // MARK: - MessagingDelegate
 extension AppDelegate: MessagingDelegate {
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String) {
+        UserDefaults.standard.set(fcmToken, forKey: "FCM_TOKEN")
+        UserDefaults.standard.synchronize()
         print("Firebase registration token: \(fcmToken)")
     }
     
